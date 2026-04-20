@@ -1,0 +1,582 @@
+{
+  "name": "Blog Generation",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Social Media Post Generator",
+        "formDescription": "Generate LinkedIn, Twitter & Instagram posts from any blog URL",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": " Blog title",
+              "placeholder": " e.g. \"Benefits of morning exercise\"",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Tone",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Professional"
+                  },
+                  {
+                    "option": "Casual"
+                  },
+                  {
+                    "option": "Funny"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Language ",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "English"
+                  },
+                  {
+                    "option": "Hindi"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Blog Length ",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Short (300 words)"
+                  },
+                  {
+                    "option": "Medium (600 words)"
+                  },
+                  {
+                    "option": "Long (1000 words)"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {
+          "buttonLabel": "Generate Content"
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        0
+      ],
+      "id": "form_id",
+      "name": "On form submission",
+      "webhookId": "webhookid"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Blog Title: {{ $json[' Blog title'] }}\nTone: {{ $json['Tone'] }}\nLanguage: {{ $json['Language '] }}\nLength: {{ $json['Blog Length '] }}\n\nWrite the blog and social media posts. Return ONLY this JSON structure:\n{\n  \"title\": \"the blog title\",\n  \"blog\": \"full blog article here with proper paragraphs\",\n  \"linkedin\": \"150-200 word professional LinkedIn post based on the blog\",\n  \"twitter\": [\"tweet 1 of 5\",\"tweet 2 of 5\",\"tweet 3 of 5\",\"tweet 4 of 5\",\"tweet 5 of 5\"],\n  \"instagram\": \"casual fun Instagram caption with 8-10 relevant #hashtags\"\n}\n",
+        "options": {
+          "systemMessage": "You are an expert blog writer and social media content strategist. \n\nYour job is to:\n1. Write a complete, engaging blog article\n2. Create platform-specific social media posts from that blog\n\nAlways respond ONLY in valid JSON format. \nNo markdown code blocks. No explanation. Just raw JSON."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "1fbb2a81-0aa0-4a5d-b2a6-a284387890aa",
+      "name": "Blog & Social Media Generator"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {
+          "maxTokensToSample": 2000,
+          "temperature": 0.7
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        80,
+        208
+      ],
+      "id": "5f9c9a85-247e-4be8-bac6-0c3bcb7c7847",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "id",
+          "name": "Blog generate"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get Blog Agent output (before SEO)\nconst blogRaw = $('Blog & Social Media Generator').item.json.output;\n\n// Get SEO Agent output  \nconst seoRaw = $('SEO Expert').item.json.output;\n\n// Clean Blog output (remove code fences, extra text)\nconst blogClean = blogRaw\n  .replace(/```json/gi, '')\n  .replace(/```/g, '')\n  .replace(/^{/, '{ \"parsed\": true, ')  // Add wrapper if malformed\n  .replace(/}$/, ' }')\n  .trim();\n\n// Try parsing Blog JSON (with fallback)\nlet blogData;\ntry {\n  blogData = JSON.parse(blogClean);\n} catch (e) {\n  // Fallback: extract title/blog manually if JSON broken\n  blogData = {\n    title: \"Untitled Blog\",\n    blog: blogRaw.slice(0, 2000) + \"...\",\n    linkedin: \"LinkedIn post unavailable\",\n    twitter: \"Twitter unavailable\",\n    instagram: \"Instagram unavailable\"\n  };\n}\n\n// Clean & parse SEO JSON\nconst seoClean = seoRaw\n  .replace(/```json/gi, '')\n  .replace(/```/g, '')\n  .trim();\n\nlet seoData;\ntry {\n  seoData = JSON.parse(seoClean);\n} catch (e) {\n  seoData = {\n    seo_title: \"SEO Title N/A\",\n    meta_description: \"Meta description N/A\",\n    focus_keyword: \"N/A\",\n    url_slug: \"untitled\",\n    lsi_keywords: [],\n    readability_score: \"N/A\",\n    seo_suggestions: [\"Check JSON format\"]\n  };\n}\n\n// Form data (clean field names)\nconst formData = $('On form submission').item.json;\n\nreturn [{\n  json: {\n    // Blog content\n    title: blogData.title || formData[' Blog title'] || \"Untitled\",\n    blog: blogData.blog || \"Blog content unavailable\",\n    linkedin: blogData.linkedin || \"\",\n    twitter: Array.isArray(blogData.twitter) \n      ? blogData.twitter.join('\\n\\n') \n      : blogData.twitter || \"\",\n    instagram: blogData.instagram || \"\",\n    \n    // SEO data\n    seo_title: seoData.seo_title || \"\",\n    meta_description: seoData.meta_description || \"\",\n    focus_keyword: seoData.focus_keyword || \"\",\n    url_slug: seoData.url_slug || \"\",\n    lsi_keywords: Array.isArray(seoData.lsi_keywords) \n      ? seoData.lsi_keywords.join(', ') \n      : \"\",\n    readability: seoData.readability_score || \"N/A\",\n    seo_suggestions: Array.isArray(seoData.seo_suggestions)\n      ? seoData.seo_suggestions.join(' | ')\n      : \"\",\n    \n    // Metadata\n    tone: formData.Tone || \"\",\n    language: formData['Language '] || \"\",\n    blog_length: formData['Blog Length '] || \"\",\n    generatedAt: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        0
+      ],
+      "id": "2bde1ff1-4bc2-4b7e-b1e0-64ba908c0407",
+      "name": "Parse AI output"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1b2UMw_bkDSWOzpgqMrQLY51odo9UrbMVU-16prPBfY8",
+          "mode": "list",
+          "cachedResultName": "n8n-new",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/xyz"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 346283296,
+          "mode": "list",
+          "cachedResultName": "Blog Generate ",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/xyz"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date": "={{ $json.generatedAt }}",
+            "Title": "={{ $json.title }}",
+            "Tone": "={{ $('On form submission').item.json.Tone }}",
+            "Language": "={{ $('On form submission').item.json['Language '] }}",
+            "Blog": "={{ $json.blog }}",
+            "LinkedIn ": "={{ $json.linkedin }}",
+            "Twitter ": "={{ $json.twitter }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Title",
+              "displayName": "Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tone",
+              "displayName": "Tone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Language",
+              "displayName": "Language",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Blog",
+              "displayName": "Blog",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "LinkedIn ",
+              "displayName": "LinkedIn ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Twitter ",
+              "displayName": "Twitter ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1152,
+        -208
+      ],
+      "id": "a8b37d5e-b1b2-44b4-aaa2-c0176043943d",
+      "name": "Log to Google Sheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "id",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "={{ $json.title }}_{{ $now.format(\"yyyy-MM-dd\") }}.txt",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1PbGcZHYvCl2gyeVv58n184IwU868eVtN",
+          "mode": "list",
+          "cachedResultName": "n8n-project",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/xyz"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1344,
+        224
+      ],
+      "id": "c86eb99b-2c19-498c-a196-145cc27fdd63",
+      "name": "Save to Google Drive",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "id",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nconst fileContent = `BLOG TITLE: ${item.title}\nGENERATED: ${item.generatedAt}\nTONE: ${item.tone} | LANGUAGE: ${item.language}\n\n================================================\nFULL BLOG ARTICLE\n================================================\n${item.blog}\n\n================================================\nLINKEDIN POST\n================================================\n${item.linkedin}\n\n================================================\nTWITTER THREAD\n================================================\n${item.twitter}\n\n================================================\nINSTAGRAM CAPTION\n================================================\n${item.instagram}`;\n\nreturn [{\n  json: item,\n  binary: {\n    data: await this.helpers.prepareBinaryData(\n      Buffer.from(fileContent, 'utf-8'),\n      `${item.title}_${new Date().toISOString().slice(0,10)}.txt`,\n      'text/plain'\n    )\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        208
+      ],
+      "id": "a7a88dd3-96c6-43a8-92cc-a10ac0920268",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.output }}",
+        "options": {
+          "systemMessage": "You are an SEO specialist.\n\nAnalyze the blog post and return ONLY this JSON, no other text:\n\n{\"seo_title\":\"\",\"meta_description\":\"\",\"focus_keyword\":\"\",\"url_slug\":\"\",\"lsi_keywords\":[],\"readability_score\":\"\",\"seo_suggestions\":[]}\n\nRules:\n- seo_title ≤ 60 characters\n- meta_description ≤ 155 characters\n- 5 LSI keywords as an array of strings\n- readability_score as a Flesch‑style grade (e.g. \"Grade 8 — Easy\")\n- 3 seo_suggestions as short strings (max 2 lines each)"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        560,
+        0
+      ],
+      "id": "4ef4a1a3-e3d7-4845-a634-8bd1ffd86d13",
+      "name": "SEO Expert"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {
+          "maxTokensToSample": 2000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        432,
+        208
+      ],
+      "id": "c3776584-1db3-420b-9138-9c72dc3cb4c4",
+      "name": "Groq Chat Model1",
+      "credentials": {
+        "groqApi": {
+          "id": "id",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "85232632-537d-46a1-837d-d8cd8b5e6733",
+              "leftValue": "={{ $json.data.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "a70b3247-fc2d-4f2a-af9a-0fa401b19e9d",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "sendTo": "xyz@gmail.com",
+        "subject": "=Blog  title :{{ $('Parse AI output').item.json.title }}",
+        "message": "=<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <style>\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body { \n      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; \n      max-width: 800px; margin: 0 auto; padding: 40px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; \n    }\n    .container { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); border-radius: 24px; box-shadow: 0 25px 50px rgba(0,0,0,0.25); overflow: hidden; }\n    .header { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 40px 30px; text-align: center; color: white; }\n    .header h1 { font-size: 2.2em; font-weight: 800; margin-bottom: 10px; text-shadow: 0 4px 12px rgba(0,0,0,0.3); }\n    .header p { opacity: 0.95; font-size: 1.1em; }\n    .content { padding: 40px 30px; }\n    .blog-title { font-size: 2em; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 30px; }\n    .seo-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 40px 0; }\n    .metric-card { background: linear-gradient(145deg, #ffffff 0%, #f0f0f0 100%); padding: 25px; border-radius: 20px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.1); transition: transform 0.3s ease; }\n    .metric-card:hover { transform: translateY(-5px); }\n    .metric-icon { font-size: 2.5em; margin-bottom: 15px; }\n    .metric-value { font-size: 1.4em; font-weight: 700; color: #1a1a1a; }\n    .metric-label { color: #64748b; font-size: 0.95em; }\n    .article-section { background: linear-gradient(145deg, #f8fafc 0%, #e2e8f0 100%); padding: 35px; border-radius: 20px; margin: 40px 0; box-shadow: 0 15px 35px rgba(0,0,0,0.08); }\n    .article-title { color: #1e293b; margin-bottom: 25px; font-size: 1.6em; }\n    .article-content { font-size: 16px; line-height: 1.8; color: #334155; }\n    .social-section { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 25px; margin: 40px 0; }\n    .social-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%); padding: 30px; border-radius: 20px; color: white; }\n    .social-card h4 { margin-bottom: 20px; font-size: 1.3em; }\n    .social-card p { line-height: 1.7; opacity: 0.95; }\n    .suggestions { background: linear-gradient(90deg, #10b981 0%, #059669 100%); color: white; padding: 30px; border-radius: 20px; margin: 40px 0; }\n    .suggestions h4 { margin-bottom: 20px; }\n    .footer { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color: white; padding: 30px; text-align: center; border-radius: 20px; margin-top: 40px; }\n    .footer small { opacity: 0.8; }\n    @media (max-width: 600px) { .content { padding: 25px 20px; } .blog-title { font-size: 1.6em; } }\n  </style>\n</head>\n<body>\n\n  <div class=\"container\">\n    \n    <!-- Header -->\n    <div class=\"header\">\n      <h1>🚀 Blog Draft Approved!</h1>\n      <p>AI‑Generated Content Pipeline • Ready for Publishing</p>\n    </div>\n    \n    <!-- Content -->\n    <div class=\"content\">\n      \n      <!-- Blog Title -->\n      <h2 class=\"blog-title\">{{ $('Parse AI output').item.json.seo_title }}</h2>\n      \n      <!-- SEO Metrics Cards -->\n      <div class=\"seo-metrics\">\n        <div class=\"metric-card\">\n          <div class=\"metric-icon\">🔑</div>\n          <div class=\"metric-value\">{{ $('Parse AI output').item.json.focus_keyword }}</div>\n          <div class=\"metric-label\">Focus Keyword</div>\n        </div>\n        <div class=\"metric-card\">\n          <div class=\"metric-icon\">📍</div>\n          <div class=\"metric-value\">/{{ $('Parse AI output').item.json.url_slug }}</div>\n          <div class=\"metric-label\">URL Slug</div>\n        </div>\n        <div class=\"metric-card\">\n          <div class=\"metric-icon\">📊</div>\n          <div class=\"metric-value\">{{ $('Parse AI output').item.json.lsi_keywords }}</div>\n          <div class=\"metric-label\">LSI Keywords</div>\n        </div>\n        <div class=\"metric-card\">\n          <div class=\"metric-icon\">⭐</div>\n          <div class=\"metric-value\">{{ $('Parse AI output').item.json.readability }}</div>\n          <div class=\"metric-label\">Readability</div>\n        </div>\n      </div>\n      \n      <!-- Full Article -->\n      <div class=\"article-section\">\n        <h3 class=\"article-title\">📝 Complete Blog Article</h3>\n        <div class=\"article-content\">\n          {{ $('Parse AI output').item.json.blog }}\n        </div>\n      </div>\n      \n      <!-- Social Media -->\n      <div class=\"social-section\">\n        <div class=\"social-card\">\n          <h4>💼 LinkedIn Post</h4>\n          <p>{{ $('Parse AI output').item.json.linkedin }}</p>\n        </div>\n        <div class=\"social-card\">\n          <h4>🐦 Twitter/X Thread</h4>\n          <p>{{ $('Parse AI output').item.json.twitter }}</p>\n        </div>\n      </div>\n      \n      <!-- SEO Suggestions -->\n      <div class=\"suggestions\">\n        <h4>💡 SEO Improvement Suggestions</h4>\n        <p>{{ $('Parse AI output').item.json.seo_suggestions }}</p>\n      </div>\n      \n    </div>\n    \n    <!-- Footer -->\n    <div class=\"footer\">\n      <p><strong>Generated:</strong> {{ $('Parse AI output').item.json.generatedAt }} | \n         <strong>Tone:</strong> {{ $('Parse AI output').item.json.tone }}</p>\n      <small>🤖 AI‑Powered Content Pipeline | n8n + Groq</small>\n    </div>\n    \n  </div>\n\n</body>\n</html>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        -96
+      ],
+      "id": "78d6d468-e7e5-4be9-84a0-23ffaf98242d",
+      "name": "Send a message",
+      "webhookId": "id",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "id",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        96
+      ],
+      "id": "4d586bcb-19e2-4442-928d-f184dfb4f843",
+      "name": "No Operation, do nothing"
+    },
+    {
+      "parameters": {
+        "chatId": "userid",
+        "text": "=🚀 New blog ready for review!  📌 {{ $json.seo_title || $json.title }} \n🔑 Keyword: {{ $json.focus_keyword || 'N/A' }}\n📖 Readability: {{ $json.readability || 'N/A' }} \nReply with exactly: ✅ Approve → Send to Gmail + Slack ❌ Reject → Skip workflow  \nTwitter preview: {{ $json.twitter }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "✅ Approve",
+                    "additionalFields": {
+                      "callback_data": "approve"
+                    }
+                  },
+                  {
+                    "text": "❌ Reject",
+                    "additionalFields": {
+                      "callback_data": "reject"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1136,
+        0
+      ],
+      "id": "f87cff2f-ab67-405f-9718-090fc00e5731",
+      "name": "Send a text message",
+      "webhookId": "id",
+      "credentials": {
+        "telegramApi": {
+          "id": "id",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Blog & Social Media Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Blog & Social Media Generator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Blog & Social Media Generator": {
+      "main": [
+        [
+          {
+            "node": "SEO Expert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI output": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Google Sheets": {
+      "main": [
+        []
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SEO Expert": {
+      "main": [
+        [
+          {
+            "node": "Parse AI output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "SEO Expert",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "00633638-d5e3-4b23-929e-d6ace5f34027",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "558d88703fb65b2d0e44613bc35916258b0f0bf983c5d4730c00c424b77ca36a"
+  },
+  "id": "ss98CKAwYs9chBab",
+  "tags": []
+}
